@@ -1,0 +1,230 @@
+---
+title: "Spotify music"
+author: "karina"
+date: "2023-11-28"
+output: html_document
+---
+
+```{r}
+library(corrplot)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(ISLR)
+library(ranger)
+library(caret)
+library(rpart)
+library(rpart.plot)
+```
+
+Para crear un modelo de clasificación por genero de canciones de Spotify en primera instancia se procederá a fusionar dos dataframes los cuales contienen información de las pistas derivadas de Spotify. La fusión resultara en un nuevo dataframe el cual conservara las columnas de track_id y genre_top de la base de datos tracks y todas las columnas de la base de datos metrics_musica
+
+```{r}
+spotifyTrack= read.csv("tracks.csv")
+spotifyMetrics = read.csv("metrics_music.csv")
+
+```
+
+Para seleccionar las columnas deseadas del grupo de datos tracks, utilice la función subset, la cual me permitio seleccionar las columnas "track_id" y "genre_top" del dataframe "tracks.csv".
+
+Una vez tengo la información necesaria para realizar el estudio, utilice la función merge, la cual me permitió combinar los dataframes spotifyCol y spotifyMetrics, por medio de la columna común track_id. Es importante destacar, que el argumento all= FALSE, sirve para establecer que solo se ha de conservar la información que se presente en ambas tablas.
+
+Para finalizar el tratamiento del nuevo dataframe se elimino la columna de track_id, ya que esta no aporta ninguna información relevante para el estudio, puesto que simplemente es una variable que contiene los identificadores únicos de cada dato recolectado
+
+```{r}
+spotifyCol=subset(spotifyTrack, select = c("track_id", "genre_top"))
+info_spoty=merge(spotifyCol , spotifyMetrics , by = "track_id", all = FALSE)
+info_spoty=info_spoty[,-1]
+info_spoty=info_spoty[,-7]
+print(head(info_spoty))
+```
+
+A continuación se presentara un grafico de correlaciones, el cual nos permitirá conocer de manera general el comportante de las variables y las relaciones entre ellas.
+
+```{r}
+info_grafico=info_spoty[,-1]
+matrizCorSpotify= cor(info_grafico)
+print(matrizCorSpotify)
+corrplot(matrizCorSpotify)
+
+```
+
+
+
+De manera general se puede identificar como las elaciones que se crean entre las variables son en su mayoría moderadas o inexistentes. Ejemplo de ello son las variables:
+
+1.  X presenta una correlación moderada positiva con danceability y energy; a su vez, presenta una correlación negativa moderada con la variable instrumentalness
+
+2.  Acousticness presenta una correlación negativa moderada con las variables X y energy. A su vez, presenta una correlación positiva moderada con la variable instrumentalness
+
+3.  La variable danceability presenta correlaciones negativas moderadas con las variables, energy, instrumentalness, liveness y tempo, de igual manera la variable presenta una correlación moderada positiva con Valance y speechiness
+
+4.  La variable energy presenta una correlación negativa moderada con speechiness y una correlación positiva moderada con liveness y tempo
+
+5.  La variable instrumentalness presenta una correlación negativa moderada con las variables liveness, speechiness y balance
+
+Es importante aclarar, que cuando se menciona la palabra moderada, en este contexto, se hace referencia a como las relaciones creadas entre las variables sin importar si son correlaciones positivas o correlaciones negativas, no son lo suficientemente fuertes como para permitirnos saber en que medida aumenta o disminuye una variable dependiendo del aumento o disminución de la otra ( esta proporcionalidad se define dependiendo del tipo de correlación existente entre las variables)
+
+
+En esta sección se presentará un análisis de componentes principales, por medio de un grafico Biplot y un grafico del codo o screeplot, a su vez, también se mostrará, una tabla con el porcentaje de la varianza acumulado de las componentes principales y se realizaran un análisis en cada apartado
+
+Del Biplot resultante del PCA podemos identificar en una primera instancia como los datos en su mayoría pertenecen a la categoría de Rock. En segunda instancia, las dimensiones del Biplot nos muestran como la componente principal numero 1 explica el 21.8% de la variabilidad de los datos, mientras que el componente principal numero 2 explica el 18.1% de la variabilidad de los datos.
+```{r}
+spotifyPca=PCA(info_grafico,graph = FALSE, ncp = 8)
+spotifyGen= c("Rock" = "green", "Hip-Hop" = "brown")
+
+fviz_pca_biplot(spotifyPca, geom.ind = "point", col.ind = info_spoty$genre_top,  palette = spotifyGen)
+
+```
+
+Del screeplot no se puede confirmar el número de componentes que se deben utilizar, ya que en este no podemos encontrar un valor claro que represente un “codo”, el cual nos indique el punto en donde las componentes dejan de aportar información significativa para la varianza haciendo que la línea de tendencia se suaviza y/o aplane 
+
+```{r}
+fviz_screeplot(spotifyPca)
+```
+
+De la tabla de varianzas acumulada podemos apreciar como las primeras dos componentes explican el 39.88% de la variabilidad de los datos y como los primeros 6 componentes explican el 82.86% de los datos estudiados 
+
+```{r}
+spotyVar= spotifyPca$eig[, "cumulative percentage of variance"]
+spotyVarTabla= data.frame("var_acumuluada" = spotyVar)
+print(spotyVarTabla)
+```
+
+A continuación se creara un árbol de decisión que nos permitirá clasificar las canciones según su genero
+Para ello primeramente se creara un grupo de datos de entrenamiento y prueba 
+```{r}
+set.seed(2023)
+spotyPorcentaje= sample(nrow(info_spoty), nrow(info_spoty)*0.7)
+spoty_entrenamiento=info_spoty[spotyPorcentaje, ]
+spoty_prueba =info_spoty[-spotyPorcentaje, ]
+```
+
+Posteriormente con los data set establecidos, se creó un árbol de decisión con las variables mas significativas del estudio
+```{r}
+spotifyArbol = rpart(genre_top ~ X + acousticness + danceability + instrumentalness +liveness + speechiness + tempo, data= spoty_entrenamiento)
+spotifyArbol_predic = predict(spotifyArbol, newdata = spoty_prueba, type = "class")
+```
+
+Luego de crear el modelo, se procedió a evaluarlo por medio de la función confuscionMatrix(), para ello primeramente se convirtió la columna genre_top de la tabla spoty_prueba en un factor el cual contiene los dos géneros musicales estudiados. Posteriormente, se utilizo la función confuscionMatrix() con las variables spotifyArbol_predic, la cual contiene las predicciones del modelo con los datos de prueba guardados previamente, estos valores son comparados o enfrentados con la segunda variable la cual contiene las categorías verdaderas perteneciente a los datos de prueba presentes en spoty_prueba$genre_top
+```{r}
+spoty_prueba$genre_top=as.factor(spoty_prueba$genre_top)
+spotyMatriz_con= confusionMatrix(spotifyArbol_predic, spoty_prueba$genre_top)
+print(spotyMatriz_con)
+```
+
+en este caso el modelo cuenta con un accuracy o precisión del 90%. Si analizamos los valores de la matriz de confusión ponemos observar como 1305 aciertos totales a la hora de predecir el género de una canción y 136 desaciertos, puesto que confundió los géneros. Analizando más a profundidad las métricas obtenidas, podemos ver, como el modelo tiene la capacidad de detectar un 62.84% de la clase positiva, que en este caso hace referencia a la categoría Hip-Hop, de igual manera, el modelo tiene la capacidad de predecir un 96.69% de la clase negativa, que en este caso, hace referencia a la categoría Rock; los datos anteriormente hacen referencia a la sensibilidad y la especificad del modelo 
+
+Por ultimo con los datos obtenidos se procedió a crear un árbol de decisión el cual se base en la clasificación de los diferentes géneros en base a las variables predictoras 
+```{r}
+spotyArbol_grafico= rpart.plot(spotifyArbol,box.palette = "purple")
+```
+
+A continuación, se creara un modelo de regresión logística, al cual se le calculara las métricas de desempeño 
+Para la creación del modelo lo primero que se hizo fue transformar las variables de genre_top de variables categóricas a variables binarias con la finalidad de poder ejecutar el modelo de regresión logística sin inconvenientes, para su ejecución lo primero que se hizo fue crear un modelo backward con la finalidad de que esto nos indicará cuáles son las variables con mayor significancia que debían estar dentro del modelo de regresión logística, hoy posterior a ello se ejecutó el modelo de regresión logística con las variables elegidas. 
+```{r}
+spoty_entrenamiento$genre_top = ifelse(spoty_entrenamiento$genre_top  == "Hip-Hop", 0, 1) 
+spoty_prueba$genre_top = ifelse(spoty_prueba$genre_top  == "Hip-Hop", 0, 1)
+
+info_spoty2=info_spoty
+info_spoty2$genre_top=ifelse(info_spoty2$genre_top== "Hip-Hop", 0, 1)
+
+modelo_regresion =glm(genre_top ~ . , data = spoty_entrenamiento, family = "binomial")
+probabilidades_prediccion = predict(modelo_regresion, newdata = spoty_prueba, type = "response")
+
+spotyNull =glm(genre_top~ 1,
+                      data = info_spoty2, family = "binomial")
+modelo_regresion_Backward= step(modelo_regresion,
+                          scope = list(lower =spotyNull ,
+                                       upper =modelo_regresion),
+                          direction = "backward")
+
+
+spotify_modelo_regresion= glm(genre_top ~ X + acousticness + danceability + instrumentalness + 
+                          liveness + speechiness+ tempo , data = spoty_entrenamiento, family = "binomial")
+mo_re_prediccion= predict(spotify_modelo_regresion, newdata = spoty_prueba, type = "response")
+
+spotify_predccion= ifelse(mo_re_prediccion> 0.5, 1, 0)
+spotify_predccion= as.factor(spotify_predccion)
+spoty_prueba$genre_top=as.factor(spoty_prueba$genre_top)
+
+```
+
+De las métricas de desempeño podemos ver cómo el modelo tiene una precisión de 89.45% y tiene la capacidad de predecir la clasificación del género hip hop en un porcentaje de 56.70%, de igual manera se pudo identificar cómo el modelo tiene la capacidad de predecir en 96.69% la clasificación del género de rock
+
+Si comparamos los resultados obtenidos de las matrices de confusión y las métricas de desempeño podemos notar cómo el modelo de árbol de decisión tiene un mejor desempeño que el modelo de regresión logístico ya que el primero tiene una precisión del 90% tiene la capacidad de predecir en un 62% el género de hip hop y }69% el género del rock and roll, hoy mientras que el modelo de regresión logística tiene una precisión del 89% y una capacidad de predicción del 56.7% para el caso del hip hop y uno 96.09% para el caso del rock 
+```{r}
+metrica_desempeno<- confusionMatrix(spotify_predccion, spoty_prueba$genre_top)
+print(metrica_desempeno)
+```
+
+A continuación y para poder tener un punto de comparación se creará un data set ten donde se tomará el 50% de los datos tanto para el grupo de entrenamiento como para el grupo de prueba esto con la finalidad de poder comparar los resultados obtenidos en este caso y en los estudios.
+para ello primeramente se creara un nuevo data set
+```{r}
+cincuenta_indice= sample(nrow(info_spoty), nrow(info_spoty)*0.5)
+cincuantaEntrenamiento =info_spoty[cincuenta_indice,]
+cincuentaPrueba= info_spoty[-cincuenta_indice, ]
+```
+
+con el nuevo data set se creara un nuevo arbol de decision
+```{r}
+cincuentaSpoty= rpart(genre_top ~ X + acousticness + danceability + instrumentalness + liveness + speechiness+tempo, data =  cincuantaEntrenamiento )
+
+cincuenta_prediccion= predict(cincuentaSpoty,newdata = cincuentaPrueba, type = "class")
+
+cincuentaPrueba$genre_top=as.factor(cincuentaPrueba$genre_top)
+
+cincuenta_matriz_con= confusionMatrix(cincuenta_prediccion ,cincuentaPrueba$genre_top)
+print(cincuenta_matriz_con)
+
+graficoSpoty_cincuenta =rpart.plot(cincuentaSpoty,box.palette = "purple")
+```
+
+tambien se creo un nuevo modelo de regresion logistica
+```{r}
+cincuantaEntrenamiento $genre_top = ifelse(cincuantaEntrenamiento $genre_top  == "Hip-Hop", 0, 1) 
+cincuentaPrueba$genre_top =ifelse(cincuentaPrueba$genre_top  == "Hip-Hop", 0, 1)
+
+cincuenta_modelo_regresion=glm(genre_top ~ X + acousticness + danceability + instrumentalness + liveness + speechiness+tempo , data = cincuantaEntrenamiento , family = "binomial")
+
+cicuenta_predccion_2= predict(cincuenta_modelo_regresion, newdata = cincuentaPrueba, type = "response")
+
+pred_cin= ifelse(cicuenta_predccion_2 > 0.5, 1, 0)
+pred_cin= as.factor(pred_cin)
+cincuentaPrueba$genre_top=as.factor(cincuentaPrueba$genre_top)
+
+
+metricas_cincuenta<- confusionMatrix(pred_cin,cincuentaPrueba$genre_top )
+print(metricas_cincuenta)
+Metrics::auc(pred_cin,cincuentaPrueba$genre_top)
+```
+
+Al analizar la métrica resultantes tanto del primer proceso, en donde se crearon dataset con 70% para el entrenamiento y el resto para la prueba, y el actual en donde se entregó un mismo porcentaje de datos tanto para la prueba como para el entrenamiento podemos darnos cuenta que existe una mejoría en el caso del modelo del árbol de decisión presente en la lectura de la sensibilidad y la especificidad, y en el caso del modelo de regresión logística podemos ver una mejoría tanto en las sensibilidad, la especificidad y la precisión
+
+Por último se creara un modelo de regresión lineal usando las componentes principales encontradas al inicio del proceso; para eso, se creerá, primero un data set con lloscomponentes principales como variables, luego se creará un nuevo data set de entrenamiento y prueba y por último se realizara una comparación respecto a si hubo una mejoría con la implementación del PC 
+```{r}
+spotify_pca <- as.data.frame(spotifyPca$ind$coord)
+spotify_pca $genre_top=info_spoty$genre_top
+print(head(spotify_pca))
+```
+
+```{r}
+spoty_pca_Entrenamiento =spotify_pca[cincuenta_indice, ]
+spoty_pca_Prueba = spotify_pca[-cincuenta_indice, ]
+
+spoty_pca_Entrenamiento$genre_top = ifelse(spoty_pca_Entrenamiento$genre_top  == "Hip-Hop", 0, 1)
+spoty_pca_Prueba$genre_top =ifelse(spoty_pca_Prueba$genre_top  == "Hip-Hop", 0, 1)
+
+spotiPca_modelo= glm(genre_top ~ ., data = spoty_pca_Entrenamiento, family = "binomial")
+spotiPca_pred= predict(spotiPca_modelo, newdata = spoty_pca_Prueba, type = "response")
+
+Spotify_prediccion= ifelse(spotiPca_pred > 0.5, 1, 0)
+Spotify_prediccion=as.factor(Spotify_prediccion)
+spoty_pca_Prueba$genre_top = as.factor(spoty_pca_Prueba$genre_top)
+
+pca_matrizS<- confusionMatrix(Spotify_prediccion, spoty_pca_Prueba$genre_top)
+print(pca_matrizS)
+Metrics::auc(Spotify_prediccion, spoty_pca_Prueba$genre_top)
+```
+
+Para el caso estudiado podemos concluir que el PCA no mejora los resultados en las métricas de desempeño, ya que disminuye los valores relacionado scon la precisión y sensibilidad del estudio 

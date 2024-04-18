@@ -1,0 +1,194 @@
+---
+title: "taller pca"
+format: html
+editor: visual
+---
+
+### TALLER PCA
+
+## Construccion y analisis previo
+
+Importar el archivo de datos en el entorno R utilizando la función read.table (o cualquier otra función similar).
+
+```{r}
+info_saltos=read.table("Einsiedeln.dat")
+```
+
+Calcule la edad (Nueva variable) de los atletas en años como Edad = 2017 - Año de nacimiento. Para llevar a cabo esta consigna, primeramente se elimino la primera fila de la tabla de datos, la cual esta compuesta de caracteres que cumplen la función de explicar el contenido de cada columna
+
+```{r}
+info_saltos= (info_saltos[-1,])
+print(head(info_saltos,10))
+```
+
+Después de ello se crea un vector vacío llamado Edades, con un tamaño que corresponda a las dimensiones de las filas de la tabla de datos info_saltos, esto con la finalidad de guardar en él, los resultados de las iteraciones del ciclo for que se creara; dicho ciclo tendrá la funcionalidad de calcular la edad de los participantes del juego, en base al año de su nacimiento
+
+```{r}
+edades=vector("numeric", length = nrow(info_saltos))
+
+for (i in 1:nrow(info_saltos)) {
+  edades[i] <- 2017 - as.numeric(info_saltos$V6[i])
+}
+print(edades)
+```
+
+Ahora procederemos a crear una nueva matriz (o Data frame) que solo contenga las siguientes 10 variables que se utilizarán en un análisis de componente principales: Edad, Velocidad, Dist. DP, A, B, C, D, E y JP.
+
+Para hacerlo, primeramente se introduce en el Data frame info_saltos una nueva columna llamada Edad, la cual contiene el vector con las edades de los jugadores, posteriormente, usando la misma sintaxis se crearan las diferentes columnas deseadas en un nuevo Data frame, con la informacion de las columnas de la tabla de datos
+
+```{r}
+info_saltos$Edad= edades
+
+DataFrame= data.frame(
+  Age= info_saltos$Edad,
+  Speed =info_saltos$V8,
+  Dist= info_saltos$V9,
+  DP= info_saltos$V10,
+  A= info_saltos$V11,
+  B= info_saltos$V12,
+  C= info_saltos$V13,
+  D= info_saltos$V14,
+  E= info_saltos$V15,
+  jp= info_saltos$V16
+)
+print(head(DataFrame, 10))
+```
+
+Ahora se etiquetaran las filas del nuevo Data frame con los nombres y apellidos de los atletas, para ello se creerá una nueva variable que contenga los nombres y apellidos de los jugadores, esto se hará por medio de la función paste la cual unirá las cadenas de caracteres de apellido y nombre
+
+```{r}
+nombresCompletos = paste(info_saltos$V2,info_saltos$V1)
+rownames(DataFrame)=nombresCompletos
+print(DataFrame)
+```
+
+Para iniciar con el análisis de los datos deseamos saber cuántos casos contiene la base de datos y crear un diagrama de cajas y bigotes por medio de la función boxplot, para ello, antes de empezar a trabajar con los datos, se tuvieron que convertir las columnas del Data frame de datos tipo caracteres a datos tipo numéricos, para ello se creo un ciclo for el cual recorre las columnas del Data frame y convierte dato a dato de carácter a numero. Luego de ejecutar el for, se procedió a usar la función boxplot para crear el diagrama de cajas y bigotes que explique la distribución de los datos
+
+```{r}
+for(i in 1:ncol(DataFrame)){
+ DataFrame[,i]=as.numeric(as.character(DataFrame[,i]))
+}
+library(ggplot2)
+boxplot(DataFrame,xlab= "ind", ylab= "values")
+
+```
+
+Para saber el numero de casos exactos de la base de datos, primero, se tiene que tener en cuenta que los casos en este contexto, son los registros únicos de las observaciones hechas o unidades de datos; comúnmente cada fila en una base de datos suele representar un caso específico; en nuestro caso la base de datos cuenta con 71 casos, los cuales hacen referencia a los diferentes datos y puntuaciones individuales de cada uno de los participantes del evento deportivo de saltos
+
+```{r}
+print(nrow(DataFrame))
+```
+
+Ahora se procederá a hacer una matriz de dispersión de las variables seleccionadas, con la finalidad de analizar de manera visual la relación que existe entre las variables
+
+```{r}
+library(corrplot)
+pairs(DataFrame, upper.panel = panel.smooth, diag.panel = NULL)
+```
+
+De la gráfica de dispersión se obtuvieron datos sumamente interesantes, entre ellos estan:
+
+1.  La variable Age presenta un patrón de dispersión horizontal, entre ella y todas las variables, lo que generalmente implica una correlación cercana a cero, lo que, a su vez, sugiere que los cambios en la variable Age no predicen ni están asociados con cambios en las otras 9 variables estudiadas.
+
+2.  La variable Speed, presenta una relación lineal creciente con todas las variables (menos Age), lo que significa que cualquier variación en la velocidad cambiara el comportamiento de las variables distancia, índice de saltos y las votaciones de los 5 jueces, al igual que el promedio de sus votos.
+
+3.  En la variable Dist, podemos apreciar claramente la existencia de un dato atípico que hace que el comportamiento de los datos de la variable cambie o fluctué, ya que, se crea una curva la cual indica una relación de no linealidad entre las variables, dicha relación se presenta con todas las variables estudiadas
+
+4.  El índice de saltos (DP), presenta una relación de linealidad creciente con las variables, lo cual indica que cualquier variación en esta, desencadenara un cambio incremental en las otras variables, es importante destacar que en este caso el valor atípico no afecto el comportamiento de los demás datos ni la tendencia creciente que presentan
+
+5.  Para el caso de las valoraciones de los jueces, podemos ver como en este las relaciones son linealmente crecientes, con todas las variables (menos Dist y la Age)
+
+6.  Algo importante a destacar es que la variable Dist y la variable Speed se presenta una relación de linealidad perfecta, en donde al agrupación de datos se da en su totalidad sobre la diagonal del grafico
+
+Para fortalecer las conclusiones establecidas anteriormente, se creará una matriz de correlación la cual explica numéricamente las relaciones planteadas anteriormente de manera visual. Los datos se explican en una escala de 1 a -1 en donde 1 es una correlación positiva y fuerte, -1 es una correlación negativa y fuerte y cero es una relación nula
+
+```{r}
+info_matriz_correlacion= cor(DataFrame)
+print(info_matriz_correlacion)
+```
+
+## Analisis PCA
+
+A continuación se creara un análisis de PCA, esta técnica nos permite resumir y visualizar grandes conjuntos de datos
+
+```{r}
+library(FactoMineR)
+info_pca=PCA(DataFrame)
+```
+
+Para iniciar con el análisis del PCA, es importante preguntarnos ¿Cuántos componentes se deben usar para describir adecuadamente este conjunto de datos?, para conocer la respuesta se procedió a realizar un gráfico scree-plot el cual es una representación visual de la cantidad de varianza explicada por cada uno de los componentes principales en un Análisis de Componentes Principales (PCA)
+
+```{r}
+fviz_screeplot(info_pca)
+componentes= info_pca$eig
+```
+
+Basándose únicamente en el comportamiento de los datos presentados en la gráfica de codo, podemos seleccionar los primeros 5 componentes principales del PCA, ya que, podemos identificar como los puntos siguientes no adicionan una cantidad significativa de información a la explicación de la varianza; en otras palabras, el codo o punto en donde la curva se empieza a aplanar indicando que agregar más componentes no aporta una mejora sustancial en la capacidad del modelo para explicar la variabilidad de los datos, es el punto numero 5
+
+Además del análisis anterior, se nos pide Hacer un biplot de PCA del PCA, en donde se dé una interpretación al primer y el segundo componente principal, y a su vez, comentar sobre la existencia de cualquier valor atípico
+
+```{r}
+fviz_pca_biplot(info_pca, repel=TRUE)
+
+```
+
+```{r}
+componentes= info_pca$eig
+print(componentes)
+summary(info_pca)
+```
+
+Al analizar los resultados de los componentes del PCA, nos encontramos con que el componente 1 (Dim.1) representa un 70.862% de la variabilidad de los datos, mientras, que el componente 2 (Dim.2) representa un 14.123% de la variabilidad del conjunto de datos. Los porcentajes significan, como el componente 1 captura una cantidad significativa de variabilidad en el conjunto de datos original, mientras que el componente 2 explica una menor cantidad de variabilidad, esto debido a que en los PCA las secciones subsecuentes respecto a las dimensiones o componentes explican una menor variabilidad total de los datos
+
+Ahora, si se analizan los datos atípicos en el biplot podemos identificar como existen diferentes datos que no siguen la tendencia de agrupación de los demás, entre ellos nos podemos encontrar con A.J BROWN, Munir GUNGEN, Florián MOLNAR, Mathis CONTAMINE, Peter KELEMEN, entre otros datos que presentan una distancia relativamente alta con la agrupación central de datos. Entre los datos atípicos se presentan dos valores resaltantes que son Jure SINKOVEC y Tilen BARTOL, los cuales son los datos mas alejados en el gráfico, siendo Tilen en punto atípico más grande ya que se encuentra ubicado al otro extremo de donde estan ubicados los datos en su mayoría. Si analizamos un poco los gráficos de dispersión con esta nueva información podríamos pensar que Tilen BARTOL es ese dato atípico que provocó la fluctuación en el comportamiento de los diferentes gráficos y por ende en la relación de múltiples variables
+
+Para conocer el efecto que el valor atípico de Tilen BARTOL, se hará un nuevo estudio de PCA en donde se elimine este valor con la finalidad de ver los cambios en los porcentajes de varianza.
+
+Para ello, primero se identificara la fila en donde se encuentra el dato de Tilen BATOL, para posteriormente eliminarlo del data frame, una vez se allá eliminado la fila se repetirá el análisis del PCA hecho previamente
+
+```{r}
+Bartol_tilen <- which(rownames(DataFrame)== "Tilen BARTOL")
+print(Bartol_tilen )
+DataFrame= DataFrame[-45,]
+
+info_pca_sinAt=PCA(DataFrame)
+info_pca_sinAt$eig
+summary(info_pca_sinAt)
+pairs(DataFrame, upper.panel = panel.smooth, diag.panel = NULL)
+
+```
+
+Después de eliminar el valor atípico correspondiente a la fila 45 se realizó un diagrama biplot y screeplot para poder analizar las nuevas varianzas
+
+```{r}
+fviz_screeplot(info_pca_sinAt)
+fviz_pca_biplot(info_pca_sinAt)
+```
+
+Analizando de manera individual el aporte al estudio de la variabilidad de cada uno de los componentes, podemos ver una redistribución de los porcentajes que relacionan la cantidad de información explicada por cada componente (en comparación con el estudio anterior), ya que en el caso de la Dim.1 o el componente uno este actualmente se explica el 78.068% de la variabilidad de los datos mientras que la Dim. 2 o componente dos explica el 9,75% de la variabilidad de los datos.
+
+Igualmente, si analizamos el gráfico de codo podemos apreciar como ahora, se debe empezar a tomar en cuenta hasta el sexto o séptimo componente, ya que es en este sexto en donde se presenta el codo y a su vez nos muestra como los componentes siguientes no aportan información relevante en el estudio de la variabilidad de los datos de este donde se presenta hoy el planeamiento de la recta
+
+Centrándonos únicamente en la información brindada por el biplot, podemos identificar que las características más apreciadas por los jueces son la velocidad y el índice de saltos de cada uno de los participantes, esto lo podemos saber ya que el ángulo que se crea entre los vectores de estas variables y los vectores que representa a los jueces, es pequeño (ya que los vectores estan mas alineado) lo que implica una mayor relación, mientras que las variables de distancia y edad presentan una relación más débil e incluso independiente ya que los vectores estan mas alejados de los vectores que representan a los jueces
+
+Para finalizar este análisis se estudiará la relación entre la puntuación final en el evento (Total) y los dos primeros principales componentes. Para ello se realizar aun estudio de PCA en donde se incluya una nueva columna que contenga los datos de la columna total de la base de datos
+
+```{r}
+info_saltos= info_saltos[-45, ]
+info_saltos$V17 = as.numeric(as.character(info_saltos$V17))
+DataFrame$total = info_saltos$V17
+names(DataFrame)[ncol(DataFrame)] = "total"
+
+```
+
+```{r}
+
+print(head(DataFrame))
+pca_info_total=PCA(DataFrame)
+fviz_pca_biplot(pca_info_total, repel = TRUE)
+pca_info_total$var$cos2
+pairs(DataFrame,  upper.panel = panel.smooth, diag.panel = NULL)
+
+```
+
+Al analizar los valores resultantes del último data frame en donde se incluyó la variable y la columna total podemos identificar ciertos detalles, para ello, es importante destacar que para hacer este análisis se utilizó los resultados brindados por $var$cos2 los cuales son los cuadrados de los cosenos de los variables, dichos cosenos, nos proporcionan información sobre cómo las variables originales se proyectan en las dimensiones uno y dos. Para nuestro caso de estudio. la variable total tiene un valor de 0.9576056 para la dimensión número uno lo que sugiere que la variable está bastante bien representada en el espacio de la componente principal uno, mientras, que en el caso de la segunda dimensión, la variable total toma un valor de coseno cuadrado igual a 1.944616e-05 lo que representa o indica que la variable tiene un cuadrado del coseno extremadamente pequeño en la dimensión número 2, lo que sugiere que la variable contribuye mínimamente en esta dimensión
